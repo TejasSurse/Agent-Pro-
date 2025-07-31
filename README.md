@@ -1,1 +1,26 @@
-"# Agent-Pro-" 
+Professional Customer Support agent for small, mid, large scale industries: 
+
+
+
+
+- Data collection and  admin pannel to monitor data - admin - owner or portal access customer support ( insights How many customer chat on portal and also list of customer (name, phone or email, summary of customer behaviour))
+- Chat bot advancements - enhanced experience in chatting only chat in context but like human 
+- logo and customized chat interface customized name of the chatbot 
+- customer context in entier chat session 
+
+
+---------------------------------------------------------
+Advance 
+- advance access to the real time data of the customer data base ( interaction with db of portal)
+- real time knowladge providing on both admin side as well as user side.
+- whatsapp, telegram, instagram integration.
+- Calling agent  
+
+
+
+-----------------------
+Objective : best ai customer supoort or chat agent for industry
+- real time 
+- fast 
+- optimized 
+- problem solving
