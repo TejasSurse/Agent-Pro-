@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Porfyro Admin Panel</title>
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: #f4f4f9;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+    /* Left Panel (Table) */
+    .table-container {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+    }
+    h1 {
+      margin-bottom: 20px;
+      color: #6b21a8;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+    th, td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+    }
+    th {
+      background: #6b21a8;
+      color: white;
+    }
+    tr:hover {
+      background: #f3e8ff;
+    }
+    button {
+      background: #6b21a8;
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.3s ease;
+    }
+    button:hover {
+      background: #5b1a8c;
+    }
+
+    /* Right Panel (Chat) */
+    .chat-container {
+      width: 50%;
+      background: #fff;
+      border-left: 1px solid #ddd;
+      box-shadow: -4px 0 12px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      opacity: 0;
+      transition: transform 0.5s ease, opacity 0.5s ease;
+    }
+    .chat-container.active {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    .chat-header {
+      background: #6b21a8;
+      color: white;
+      padding: 16px;
+      font-weight: bold;
+      font-size: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chat-messages {
+      padding: 20px;
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .message {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      transition: all 0.3s ease;
+    }
+    .user {
+      align-self: flex-end;
+      background: #6b21a8;
+      color: white;
+      border-radius: 20px 20px 0 20px;
+      transform: translateX(30px);
+      opacity: 0;
+      animation: slideInUser 0.4s forwards;
+    }
+    .ai {
+      align-self: flex-start;
+      background: #e9d5ff;
+      color: #1f2937;
+      border-radius: 20px 20px 20px 0;
+      transform: translateX(-30px);
+      opacity: 0;
+      animation: slideInAI 0.4s forwards;
+    }
+    @keyframes slideInUser {
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideInAI {
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .close-chat {
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="table-container">
+    <h1>Porfyro Admin Panel</h1>
+    <table id="userTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>Behaviour</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="chatContainer" class="chat-container">
+    <div class="chat-header">
+      <span id="chatTitle">Chat</span>
+      <button class="close-chat" onclick="closeChat()">×</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3000/admin';
+    const tbody = document.querySelector('#userTable tbody');
+    const chatContainer = document.getElementById('chatContainer');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatTitle = document.getElementById('chatTitle');
+
+    const chatDataStore = {}; // store chats by user id
+
+    async function loadUsers() {
+      const res = await fetch(API_URL);
+      const data = await res.json();
+      if (data.success) {
+        tbody.innerHTML = '';
+        data.data.forEach(user => {
+          chatDataStore[user.id] = user.chat; // store chat JSON
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${user.id}</td>
+            <td>${user.name}</td>
+            <td><a href="tel:${user.phone}">${user.phone}</a></td>
+            <td>${user.behaviour}</td>
+            <td><button onclick='viewChat(${user.id}, "${user.name}")'>View Chat</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+    }
+
+    function viewChat(id, name) {
+      chatMessages.innerHTML = '';
+      chatTitle.textContent = `Chat with ${name}`;
+
+      const chatData = chatDataStore[id];
+      if (!chatData) {
+        chatMessages.innerHTML = '<p>No chat available.</p>';
+      } else {
+        try {
+          const messages = JSON.parse(chatData);
+          messages.forEach(m => {
+            const userMsg = document.createElement('div');
+            userMsg.className = 'message user';
+            userMsg.textContent = m.message;
+            chatMessages.appendChild(userMsg);
+
+            const aiMsg = document.createElement('div');
+            aiMsg.className = 'message ai';
+            aiMsg.innerHTML = parseMarkdown(m.ai);
+            chatMessages.appendChild(aiMsg);
+          });
+        } catch (err) {
+          chatMessages.innerHTML = '<p>Invalid chat format.</p>';
+        }
+      }
+      chatContainer.classList.add('active');
+    }
+
+    function closeChat() {
+      chatContainer.classList.remove('active');
+    }
+
+    function parseMarkdown(text) {
+      if (!text) return '';
+      let html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      return html;
+    }
+
+    loadUsers();
+  </script>
+</body>
+</html>

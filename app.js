@@ -2,24 +2,27 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const connection = require('./db/db.js');
 
 const app = express();
 app.use(express.json());
 app.use(cors()); // Allow all origins - for development only
 
-// Gemini API setup (use your valid API key)
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+// ---------- Gemini API Configuration ----------
+const GEMINI_API_URL =
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Conversation history and user info
-let conversation = [];
-let name = null;
-let phone = null;
-let behavior = null; // Store as natural string, e.g., "Interested in IT Consultancy and Cloud Computing"
+// ---------- Conversation & User Data ----------
+let conversation = [];         // Short conversation for AI context
+let fullConversation = [];     // Full conversation array (start to end)
+let name = null;               // User name (from form)
+let phone = null;              // User phone (from form)
+let behavior = null;           // User behavior (natural text)
 
-// Porfyro Company Info & instructions prompt for Gemini
+// ---------- Base Prompt ----------
 const BASE_PROMPT = `
-You are "Porfyro Support Assistant," the official AI customer support agent for **Porfyro** — a modern IT solutions company based in Hyderabad, India. Your goal is to assist users, collect their information naturally, and provide tailored solutions based on their business needs.
+You are  "tejX - and you are Porfyro Support Assistant," the official AI customer support agent for **Porfyro** — a modern IT solutions company based in Hyderabad, India. Your goal is to assist users, collect their information naturally, and provide tailored solutions based on their business needs.
 
 Porfyro Overview:
 - **Tagline**: Your Partner in Digital Innovation
@@ -69,13 +72,15 @@ Porfyro Overview:
 - Use emojis sparingly to enhance engagement (e.g., 😊, 🚀).
 - Add .html extension to page links.
 - Start by waiting for the user's input, responding with the form trigger if they say "hi" or similar.
+- send relevant links as clickable Markdown buttons, e.g., [Contact Us](https://www.porfyro.com/contact.html). when chatting related to question 
+- and when started conversaiton you are sending form that time also greeting message with your introduction also.
+- and every time contact us link should be clickable button like [Contact Us](https://www.porfyro.com/contact.html)
 `;
 
-// Build the prompt combining base prompt with recent conversation history and user info
+// ---------- Prompt Builder ----------
 function buildPromptFromConversation() {
   let text = BASE_PROMPT + '\n\n';
 
-  // Include user info if available
   if (name || phone || behavior) {
     text += 'User Information:\n';
     if (name) text += `- Name: ${name}\n`;
@@ -84,115 +89,79 @@ function buildPromptFromConversation() {
   }
 
   text += '\nConversation:\n';
-
-  // Use last 6 messages to keep prompt size manageable
   const recentConvo = conversation.slice(-6);
   recentConvo.forEach((msg, idx) => {
-    if (idx % 2 === 0) {
-      text += `User: ${msg}\n`;
-    } else {
-      text += `AI: ${msg}\n`;
-    }
+    text += idx % 2 === 0 ? `User: ${msg}\n` : `AI: ${msg}\n`;
   });
 
-  text += 'AI:'; // Signal to generate next AI reply
+  text += 'AI:';
   return text;
 }
 
-// Function to extract user info from messages
-function extractUserInfo(message, aiResponse) {
-  // Determine behavior as a natural string
+// ---------- Behavior Extractor ----------
+function extractUserInfo(message) {
   const lowerMessage = message.toLowerCase();
   const services = [
-    'IT Consultancy',
-    'Custom Software Development',
-    'Web Development',
-    'Business Management',
-    'E-commerce',
-    'Digital Marketing',
-    'IT Infrastructure',
-    'Data Protection',
-    'Customer Support',
-    'Cloud Computing',
-    'Boozexpress',
-    'Cravify',
-    'Pharmxpress'
+    'IT Consultancy', 'Custom Software Development', 'Web Development',
+    'Business Management', 'E-commerce', 'Digital Marketing',
+    'IT Infrastructure', 'Data Protection', 'Customer Support',
+    'Cloud Computing', 'Boozexpress', 'Cravify', 'Pharmxpress'
   ];
+  const matched = services.filter(service =>
+    lowerMessage.includes(service.toLowerCase())
+  );
 
-  // Check for interest or lack thereof
-  const matchedServices = services.filter(service => lowerMessage.includes(service.toLowerCase()));
   if (lowerMessage.includes('interested') || lowerMessage.includes('looking for') || lowerMessage.includes('need')) {
-    if (matchedServices.length > 0) {
-      behavior = `Interested in ${matchedServices.join(' and ')}`;
-    } else {
-      behavior = 'Interested in general IT solutions';
-    }
+    behavior = matched.length
+      ? `Interested in ${matched.join(' and ')}`
+      : 'Interested in general IT solutions';
   } else if (lowerMessage.includes('not interested') || lowerMessage.includes('no thanks')) {
     behavior = 'Not interested';
-  } else if (matchedServices.length > 0) {
-    // If services are mentioned without explicit interest keywords, assume interest
-    behavior = `Interested in ${matchedServices.join(' and ')}`;
+  } else if (matched.length) {
+    behavior = `Interested in ${matched.join(' and ')}`;
   }
 }
 
-// Endpoint to handle form submission
+// ---------- Form Submission ----------
 app.post('/submit-user-info', (req, res) => {
   const { name: submittedName, phone: submittedPhone } = req.body;
-
   if (!submittedName || !submittedPhone) {
     return res.status(400).json({ error: 'Please provide both name and phone number.' });
   }
-
-  // Store user info
   name = submittedName;
   phone = submittedPhone;
-
-  console.log('Form Submission:');
-  console.log(`- Name: ${name}`);
-  console.log(`- Phone: ${phone}`);
-
+  console.log('Form Submission ->', { name, phone });
   res.json({ message: 'User info submitted successfully.' });
 });
 
+// ---------- Chat ----------
 app.post('/ask', async (req, res) => {
   const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'Please provide a "message" in the request body.' });
 
-  if (!message) {
-    return res.status(400).json({ error: 'Please provide a "message" in the request body.' });
-  }
-
-  // Add user message to conversation history
+  // Store messages
   conversation.push(message);
+  fullConversation.push({ role: 'user', message });
 
-  // Build prompt with conversation context + base Porfyro info
   const promptText = buildPromptFromConversation();
 
   try {
     const response = await axios.post(
       GEMINI_API_URL,
-      {
-        contents: [{ parts: [{ text: promptText }] }],
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        params: { key: GEMINI_API_KEY },
-      }
+      { contents: [{ parts: [{ text: promptText }] }] },
+      { headers: { 'Content-Type': 'application/json' }, params: { key: GEMINI_API_KEY } }
     );
 
-    let answer =
-      response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
-      "I'm sorry, I couldn't generate an answer at this time. 😔";
+    let answer = response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+                || "I'm sorry, I couldn't generate an answer at this time. 😔";
 
-    // Ensure the website link is included in every response
     if (!answer.includes('[Porfyro](https://www.porfyro.com/)')) {
       answer += '\n\nExplore more at [Porfyro](https://www.porfyro.com/)! 🚀';
     }
 
-    // Extract user info from message and AI response
-    extractUserInfo(message, answer);
-
-    // Add AI answer to conversation history
+    extractUserInfo(message);
     conversation.push(answer);
+    fullConversation.push({ role: 'ai', message: answer });
 
     res.json({ answer });
   } catch (error) {
@@ -201,27 +170,63 @@ app.post('/ask', async (req, res) => {
   }
 });
 
-// Endpoint to reset the conversation and user info
-app.post('/reset', (req, res) => {
-  // Log user information before resetting
-  console.log('User Information at Conversation End:');
-  console.log(`- Name: ${name}`);
-  console.log(`- Phone: ${phone}`);
-  console.log(`- Behavior: ${behavior}`);
+// ---------- Reset (Save to DB) ----------
+app.post('/reset', async (req, res) => {
+  console.log('Conversation End ->', { name, phone, behavior });
 
+  try {
+    if (name && phone) {
+      // Create chat logs
+      const compactChat = [];
+      for (let i = 0; i < conversation.length; i += 2) {
+        compactChat.push({ message: conversation[i] || '', ai: conversation[i + 1] || '' });
+      }
+
+      const compactChatJSON = JSON.stringify(compactChat);
+      const fullChatJSON = JSON.stringify(fullConversation);
+
+      // Insert into DB
+      const query = `INSERT INTO usersDetails (name, phone, behaviour, chat, fullChat) VALUES (?, ?, ?, ?, ?)`;
+      await connection.execute(query, [
+        name,
+        phone,
+        behavior || 'No behavior detected',
+        compactChatJSON,
+        fullChatJSON
+      ]);
+
+      console.log('User data & conversation inserted into DB.');
+    }
+  } catch (dbErr) {
+    console.error('Database insert error:', dbErr.message);
+  }
+
+  // Reset in-memory data
   conversation = [];
+  fullConversation = [];
   name = null;
   phone = null;
   behavior = null;
+
   res.json({ message: 'Conversation and user info reset successfully.' });
 });
 
-// Simple homepage to verify server is running
+// ---------- Admin Data ----------
+app.get('/admin', async (req, res) => {
+  try {
+    const [rows] = await connection.execute('SELECT * FROM usersDetails');
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Database query error:', error);
+    res.status(500).json({ success: false, error: 'Error fetching data from database.' });
+  }
+});
+
+// ---------- Health Check ----------
 app.get('/', (req, res) => {
   res.send('Welcome to Porfyro AI Support! Use POST /ask to chat.');
 });
 
+// ---------- Start Server ----------
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Porfyro AI Support server running on port ${port}`);
-});
+app.listen(port, () => console.log(`Porfyro AI Support server running on port ${port}`));

@@ -330,7 +330,7 @@
     background-color: #f3f4f6;
   }
 
-  /* Responsive - Improved mobile view */
+  /* Responsive */
   @media (max-width: 480px) {
     #chatbot-container {
       width: 95vw;
@@ -343,41 +343,6 @@
       height: 75vh;
       border-radius: 12px;
     }
-    #chatbot-header {
-      font-size: 16px;
-      padding: 16px 20px;
-    }
-    #chatbot-messages {
-      padding: 16px 20px;
-    }
-    #chatbot-input {
-      max-width: calc(100% - 80px);
-      font-size: 13px;
-      padding: 10px 14px;
-    }
-    #chatbot-send-btn {
-      padding: 10px 14px;
-      font-size: 13px;
-    }
-    #chatbot-send-btn svg {
-      width: 16px;
-      height: 16px;
-    }
-    .message {
-      font-size: 13px;
-      padding: 10px 14px;
-    }
-    #chatbot-form-area {
-      padding: 12px 16px;
-    }
-    #chatbot-form-area input {
-      font-size: 13px;
-      padding: 10px 14px;
-    }
-    #chatbot-form-area button {
-      font-size: 13px;
-      padding: 10px 14px;
-    }
   }
 </style>
 </head>
@@ -385,10 +350,8 @@
 
 <div id="chatbot-container" aria-label="Porfyo AI chatbot widget">
   <div id="chatbot-minimized" role="button" aria-expanded="false" aria-controls="chatbot" tabindex="0" title="Open chat">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-    Chat with Porfyo AI
+    
+    <img src="logo-2.png" height="24px" widht="auto">
   </div>
 
   <section id="chatbot" role="region" aria-live="polite" aria-label="Porfyo AI conversation window">
@@ -397,12 +360,10 @@
       <button id="chatbot-close" aria-label="Close chat">&times;</button>
     </header>
 
-    <div id="chatbot-messages" aria-live="polite" aria-relevant="additions" tabindex="0">
-      <!-- Chat messages appear here -->
-    </div>
+    <div id="chatbot-messages"></div>
 
-    <form id="chatbot-input-area" aria-label="Send a message">
-      <input type="text" id="chatbot-input" placeholder="Type your message..." autocomplete="off" aria-required="true" aria-label="Message input" />
+    <form id="chatbot-input-area">
+      <input type="text" id="chatbot-input" placeholder="Type your message..." autocomplete="off" />
       <button type="submit" id="chatbot-send-btn" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
@@ -411,206 +372,158 @@
       </button>
     </form>
 
-    <form id="chatbot-form-area" aria-label="Enter your details" style="display: none;">
-      <input type="text" id="chatbot-name-input" placeholder="Your name" autocomplete="off" aria-required="true" aria-label="Name input" />
-      <input type="tel" id="chatbot-phone-input" placeholder="Your phone number" autocomplete="off" aria-required="true" aria-label="Phone input" />
+    <form id="chatbot-form-area">
+      <input type="text" id="chatbot-name-input" placeholder="Your name" autocomplete="off" />
+      <input type="tel" id="chatbot-phone-input" placeholder="Your phone number" autocomplete="off" />
       <button type="submit" id="chatbot-form-submit-btn">Submit</button>
     </form>
   </section>
 </div>
 
 <script>
-  (() => {
-    const container = document.getElementById('chatbot-container');
-    const minimizedBar = document.getElementById('chatbot-minimized');
-    const chatWindow = document.getElementById('chatbot');
-    const closeBtn = document.getElementById('chatbot-close');
-    const messagesContainer = document.getElementById('chatbot-messages');
-    const inputForm = document.getElementById('chatbot-input-area');
-    const inputField = document.getElementById('chatbot-input');
-    const sendBtn = document.getElementById('chatbot-send-btn');
-    const userInfoForm = document.getElementById('chatbot-form-area');
-    const nameInput = document.getElementById('chatbot-name-input');
-    const phoneInput = document.getElementById('chatbot-phone-input');
-    const formSubmitBtn = document.getElementById('chatbot-form-submit-btn');
+(() => {
+  const minimizedBar = document.getElementById('chatbot-minimized');
+  const chatWindow = document.getElementById('chatbot');
+  const closeBtn = document.getElementById('chatbot-close');
+  const messagesContainer = document.getElementById('chatbot-messages');
+  const inputForm = document.getElementById('chatbot-input-area');
+  const inputField = document.getElementById('chatbot-input');
+  const sendBtn = document.getElementById('chatbot-send-btn');
+  const userInfoForm = document.getElementById('chatbot-form-area');
+  const nameInput = document.getElementById('chatbot-name-input');
+  const phoneInput = document.getElementById('chatbot-phone-input');
+  const formSubmitBtn = document.getElementById('chatbot-form-submit-btn');
 
-    // Backend API URLs
-    const API_URL = 'http://localhost:3000/ask';
-    const SUBMIT_INFO_URL = 'http://localhost:3000/submit-user-info';
+  const API_URL = 'http://localhost:3000/ask';
+  const SUBMIT_INFO_URL = 'http://localhost:3000/submit-user-info';
+  const RESET_URL = 'http://localhost:3000/reset'; // <-- Added reset URL
 
-    let isLoading = false;
-    let userInfoSubmitted = false;
+  let isLoading = false;
+  let userInfoSubmitted = false;
 
-    // Conversation history
-    const conversation = [];
+  function parseMarkdown(text) {
+    let html = text.replace(/\n/g, '<br>');
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return html;
+  }
 
-    function parseMarkdown(text) {
-      let html = text.replace(/\n/g, '<br>');
-      html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      html = html.replace(/^\* +(.+?)(?=<br>|$)/gm, '<li>$1</li>');
-      html = html.replace(/(<li>.+<\/li>(?:<br>)?)+/g, '<ul>$&</ul>');
-      html = html.replace(/<\/li><br>/g, '</li>');
-      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-      return html;
-    }
-
-    function appendMessage(text, sender) {
-      const el = document.createElement('div');
-      el.classList.add('message', sender);
-      if (sender === 'loading') {
-        el.innerHTML = '<div class="loader"><span></span><span></span><span></span></div> AI is typing...';
-      } else if (sender === 'ai') {
-        el.innerHTML = parseMarkdown(text);
-        // Check if the message is the form trigger
-        if (text.includes('Please share your details!') && !userInfoSubmitted) {
-          userInfoForm.style.display = 'flex';
-          userInfoForm.classList.add('active');
-          inputForm.style.display = 'none';
-          nameInput.focus();
-        }
-      } else {
-        el.textContent = text;
-      }
-      messagesContainer.appendChild(el);
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-
-    function setLoading(loading) {
-      isLoading = loading;
-      sendBtn.disabled = loading || inputField.value.trim() === '';
-      formSubmitBtn.disabled = loading || nameInput.value.trim() === '' || phoneInput.value.trim() === '';
-      if (loading) {
-        appendMessage('', 'loading');
-      } else {
-        const loadingEls = messagesContainer.querySelectorAll('.message.loading');
-        loadingEls.forEach(el => el.remove());
-      }
-    }
-
-    // Handle enabling send button
-    inputField.addEventListener('input', () => {
-      sendBtn.disabled = isLoading || inputField.value.trim() === '';
-    });
-
-    // Handle enabling form submit button
-    function updateFormSubmitButton() {
-      formSubmitBtn.disabled = isLoading || nameInput.value.trim() === '' || phoneInput.value.trim() === '';
-    }
-    nameInput.addEventListener('input', updateFormSubmitButton);
-    phoneInput.addEventListener('input', updateFormSubmitButton);
-
-    // Toggle chat window open/close
-    function openChat() {
-      minimizedBar.style.opacity = '0';
-      minimizedBar.style.transform = 'scale(0.8)';
-      setTimeout(() => {
-        minimizedBar.style.display = 'none';
-        chatWindow.classList.add('active');
-        minimizedBar.setAttribute('aria-expanded', 'true');
-        inputField.focus();
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      }, 300);
-    }
-    function closeChat() {
-      chatWindow.classList.remove('active');
-      setTimeout(() => {
-        minimizedBar.style.display = 'flex';
-        minimizedBar.style.opacity = '1';
-        minimizedBar.style.transform = 'scale(1)';
-        minimizedBar.setAttribute('aria-expanded', 'false');
-        minimizedBar.focus();
-      }, 300);
-    }
-
-    minimizedBar.addEventListener('click', openChat);
-    minimizedBar.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        openChat();
-      }
-    });
-    closeBtn.addEventListener('click', closeChat);
-
-    inputForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      if (isLoading) return;
-      const message = inputField.value.trim();
-      if (!message) return;
-
-      appendMessage(message, 'user');
-      conversation.push(message);
-      inputField.value = '';
-      sendBtn.disabled = true;
-
-      setLoading(true);
-
-      try {
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message }),
-        });
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const data = await response.json();
-        appendMessage(data.answer, 'ai');
-        conversation.push(data.answer);
-      } catch (err) {
-        appendMessage('Sorry, something went wrong. Please try again.', 'ai');
-        console.error('Chatbot fetch error:', err);
-      } finally {
-        setLoading(false);
-        inputField.focus();
-      }
-    });
-
-    userInfoForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      if (isLoading) return;
-      const userName = nameInput.value.trim();
-      const userPhone = phoneInput.value.trim();
-      if (!userName || !userPhone) return;
-
-      setLoading(true);
-
-      try {
-        const response = await fetch(SUBMIT_INFO_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: userName, phone: userPhone }),
-        });
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const data = await response.json();
-        appendMessage('Thanks for sharing your details! How can I assist you now? [Porfyro](https://www.porfyro.com/) 😊', 'ai');
-        conversation.push('User submitted form');
-        conversation.push('Thanks for sharing your details! How can I assist you now? [Porfyro](https://www.porfyro.com/) 😊');
-        userInfoSubmitted = true;
-        userInfoForm.style.display = 'none';
-        userInfoForm.classList.remove('active');
-        inputForm.style.display = 'flex';
-        nameInput.value = '';
-        phoneInput.value = '';
-      } catch (err) {
-        appendMessage('Sorry, something went wrong with the form submission. Please try again.', 'ai');
-        console.error('Form submission error:', err);
-      } finally {
-        setLoading(false);
-        inputField.focus();
-      }
-    });
-
-    // Ensure initial scroll position
+  function appendMessage(text, sender) {
+    const el = document.createElement('div');
+    el.classList.add('message', sender);
+    el.innerHTML = sender === 'ai' ? parseMarkdown(text) : text;
+    messagesContainer.appendChild(el);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-    // Optional: Open chat automatically
-    // openChat();
-  })();
-</script>
+    if (sender === 'ai' && text.includes('Please share your details!') && !userInfoSubmitted) {
+      userInfoForm.style.display = 'flex';
+      userInfoForm.classList.add('active');
+      inputForm.style.display = 'none';
+      nameInput.focus();
+    }
+  }
 
+  function setLoading(loading) {
+    isLoading = loading;
+    sendBtn.disabled = loading || inputField.value.trim() === '';
+    formSubmitBtn.disabled = loading || nameInput.value.trim() === '' || phoneInput.value.trim() === '';
+  }
+
+  // Open / Close chat
+  function openChat() {
+    minimizedBar.style.display = 'none';
+    chatWindow.classList.add('active');
+    inputField.focus();
+  }
+
+  async function closeChat() {
+    chatWindow.classList.remove('active');
+    try {
+      await fetch(RESET_URL, { method: 'POST' }); // <-- Call reset on close
+    } catch (err) {
+      console.error('Error calling reset API:', err);
+    }
+    setTimeout(() => {
+      minimizedBar.style.display = 'flex';
+      minimizedBar.style.opacity = '1';
+    }, 300);
+  }
+
+  minimizedBar.addEventListener('click', openChat);
+  closeBtn.addEventListener('click', closeChat);
+
+  // Handle send message
+  inputForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (isLoading) return;
+    const message = inputField.value.trim();
+    if (!message) return;
+
+    appendMessage(message, 'user');
+    inputField.value = '';
+    sendBtn.disabled = true;
+    setLoading(true);
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      const data = await response.json();
+      appendMessage(data.answer, 'ai');
+    } catch (err) {
+      appendMessage('Sorry, something went wrong. Please try again.', 'ai');
+    } finally {
+      setLoading(false);
+      inputField.focus();
+    }
+  });
+
+  // Handle user info form
+  userInfoForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (isLoading) return;
+
+    const userName = nameInput.value.trim();
+    const userPhone = phoneInput.value.trim();
+    if (!userName || !userPhone) return;
+
+    setLoading(true);
+    try {
+      await fetch(SUBMIT_INFO_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: userName, phone: userPhone }),
+      });
+      appendMessage('Thanks for sharing your details! How can I assist you now? [Porfyro](https://www.porfyro.com/) 😊', 'ai');
+      userInfoSubmitted = true;
+      userInfoForm.style.display = 'none';
+      inputForm.style.display = 'flex';
+      nameInput.value = '';
+      phoneInput.value = '';
+    } catch (err) {
+      appendMessage('Sorry, something went wrong with the form submission. Please try again.', 'ai');
+    } finally {
+      setLoading(false);
+      inputField.focus();
+    }
+  });
+
+  // Call reset when page is closed
+  window.addEventListener('beforeunload', async () => {
+    try {
+      await fetch(RESET_URL, { method: 'POST' });
+    } catch (err) {
+      console.error('Error calling reset API on unload:', err);
+    }
+  });
+
+  // Handle enabling/disabling send button
+  inputField.addEventListener('input', () => sendBtn.disabled = isLoading || inputField.value.trim() === '');
+  nameInput.addEventListener('input', () => formSubmitBtn.disabled = isLoading || nameInput.value.trim() === '' || phoneInput.value.trim() === '');
+  phoneInput.addEventListener('input', () => formSubmitBtn.disabled = isLoading || nameInput.value.trim() === '' || phoneInput.value.trim() === '');
+})();
+</script>
 </body>
 </html>
